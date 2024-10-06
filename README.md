@@ -6,4 +6,6 @@
 
 `example_strategy.py` - reference code for how to structure code for a strategy
 
+`starter_code.py` - skeleton code for making strategy
+
 `run_backtester.ipynb` - jupyter notebook with framework to import your strategy and run backtester
