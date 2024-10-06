@@ -1,6 +1,6 @@
 # CTC-2024-Derivatives
 
-`data` - folder containing options data and s&p underlying prices 
+`data` - folder containing options data, s&p underlying prices, and a sample csv output of what your strategy should generate
 
 `backtester.py` - code for backtesting strategies
 
