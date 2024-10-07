@@ -9,3 +9,5 @@
 `starter_code.py` - skeleton code for making strategy
 
 `run_backtester.ipynb` - jupyter notebook with framework to import your strategy and run backtester
+
+Note: allowed libraries include `numpy, matplotlib, seaborn, pandas, scipy, statsmodels`. Usage of machine and deep learning techniques is not permitted.
