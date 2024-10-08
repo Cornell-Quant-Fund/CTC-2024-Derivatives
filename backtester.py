@@ -79,7 +79,7 @@ class Backtester:
             raise ValueError("Order size must be positive")
 
           if (row["action"] == "B" and order_size > ask_size) or (row["action"] == "S" and order_size > buy_size):
-            raise ValueError(f"Order size exceeds available size; order size: {order_size}, ask size: {ask_size}, buy size: {buy_size}; action: {row["action"]}")
+            raise ValueError(f"Order size exceeds available size; order size: {order_size}, ask size: {ask_size}, buy size: {buy_size}; action: {row['action']}")
 
           if row["action"] == "B":
             options_cost: float = order_size * ask_price + 0.1 * strike_price
@@ -130,6 +130,7 @@ class Backtester:
       
       self.portfolio_value = max(self.portfolio_value, 0)
       
+      self.open_orders = self.open_orders[self.open_orders["expiration_date"] != str(current_date).split(" ")[0]]
       current_date += delta
       print(str(current_date), "capital:", self.capital, "portfolio value:", self.portfolio_value, "total pnl:", (self.capital + self.portfolio_value), "open orders:", len(self.open_orders))
 
