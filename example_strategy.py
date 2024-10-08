@@ -19,7 +19,7 @@ class Strategy:
 
   def generate_orders(self) -> pd.DataFrame:
     orders = []
-    num_orders = 1000
+    num_orders = 100
     
     for _ in range(num_orders):
       row = self.options.sample(n=1).iloc[0]
@@ -30,7 +30,7 @@ class Strategy:
       else:
         order_size = random.randint(1, int(row["bid_sz_00"]))
 
-      assert order_size <= int(row["ask_sz_00"]) or int(row["bid_sz_00"])
+      assert order_size <= int(row["ask_sz_00"]) or order_size <= int(row["bid_sz_00"])
       
       order = {
         "datetime" : row["ts_recv"],

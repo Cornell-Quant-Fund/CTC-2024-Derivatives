@@ -79,20 +79,23 @@ class Backtester:
             raise ValueError("Order size must be positive")
 
           if (row["action"] == "B" and order_size > ask_size) or (row["action"] == "S" and order_size > buy_size):
-            raise ValueError(f"Order size exceeds available size; order size: {order_size}, ask size: {ask_size}, buy size: {buy_size}")
+            raise ValueError(f"Order size exceeds available size; order size: {order_size}, ask size: {ask_size}, buy size: {buy_size}; action: {row["action"]}")
 
           if row["action"] == "B":
             options_cost: float = order_size * ask_price + 0.1 * strike_price
-            if self.capital >= options_cost:
-              self.capital -= options_cost
+            margin: float = (ask_price + 0.1 * strike_price) * order_size
+            if self.capital >= margin and self.capital - options_cost + 0.5 > 0:
+              self.capital -= options_cost + 0.5
               self.portfolio_value += options_cost
               self.open_orders.loc[len(self.open_orders)] = row
           else:
             underlying_price: float = float(self.underlying[self.underlying["date"] == row["day"]]["adj close"].iloc[0])
             sold_stock_cost: float = order_size * 100 * underlying_price
-            if (self.capital + order_size * buy_price + 0.1 * strike_price) > sold_stock_cost:
+            open_price: float = float(self.underlying[self.underlying["date"] == row["day"]]["open"].iloc[0])
+            margin : float = 100 * order_size * (buy_price + 0.1 * open_price)
+            if (self.capital + order_size * buy_price + 0.1 * strike_price) > margin and (self.capital + order_size * buy_price + 0.1 * strike_price - sold_stock_cost + 0.5) > 0:
               self.capital += order_size * buy_price + 0.1 * strike_price
-              self.capital -= sold_stock_cost
+              self.capital -= sold_stock_cost + 0.5
               self.portfolio_value += order_size * 100 * underlying_price
               self.open_orders.loc[len(self.open_orders)] = row
 
@@ -124,14 +127,28 @@ class Backtester:
                   cost = order_size * 100 * (strike_price - underlying_price)
                   self.capital -= cost
                   self.portfolio_value += cost
-          
-          self.capital = max(self.capital, 0)
-          self.portfolio_value = max(self.portfolio_value, 0)
-
+      
+      self.portfolio_value = max(self.portfolio_value, 0)
+      
       current_date += delta
       print(str(current_date), "capital:", self.capital, "portfolio value:", self.portfolio_value, "total pnl:", (self.capital + self.portfolio_value), "open orders:", len(self.open_orders))
 
       self.pnl.append(self.capital + self.portfolio_value)
+
+    # take care of open orders past the expiration date
+    for _, order in self.open_orders.iterrows():
+      option_metadata: List = self.parse_option_symbol(order["option_symbol"])
+      last_row : pd.Series = self.underlying.iloc[-1]
+      if (option_metadata[1] == "B"):
+        self.portfolio_value -= last_row["adj close"] * 100 * row["order_size"]
+        self.capital += 0.9 * (last_row["adj close"] * 100 * row["order_size"])
+      else:
+        self.portfolio_value += last_row["adj close"] * 100 * row["order_size"]
+        self.capital -= 1.1 * (last_row["adj close"] * 100 * row["order_size"])
+
+    self.pnl.append(self.capital + self.portfolio_value)
+
+    print("after closing open orders: final capital:", self.capital, "final portfolio value:", self.portfolio_value, "final pnl:", self.pnl[-1])
 
   def compute_overall_score(self):
     self.max_drawdown = (max(self.pnl) - min(self.pnl)) / max(self.pnl)
