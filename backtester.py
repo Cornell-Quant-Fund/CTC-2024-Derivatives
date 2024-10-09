@@ -155,7 +155,7 @@ class Backtester:
     self.max_drawdown = (max(self.pnl) - min(self.pnl)) / max(self.pnl)
     print(f"Max Drawdown: {self.max_drawdown}")
 
-    self.overall_return = 100 * ((self.pnl[-1] - 1_000_000) / 1_000_000)
+    self.overall_return = 100 * ((self.pnl[-1] - 100_000_000) / 100_000_000)
     print(f"Overall Return: {self.overall_return}%")
 
     percentage_returns = []
