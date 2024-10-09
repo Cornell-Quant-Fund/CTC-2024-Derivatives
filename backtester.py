@@ -17,22 +17,26 @@ class Backtester:
     self.user_strategy = strategy
     self.orders : pd.DataFrame = self.user_strategy.generate_orders()
     self.orders["day"] = self.orders["datetime"].apply(lambda x: x.split("T")[0])
+    self.orders["hour"] = self.orders["datetime"].apply(lambda x: int(x.split("T")[1].split(".")[0].split(":")[0]))
     self.orders["expiration_date"] = self.orders["option_symbol"].apply(lambda x: self.get_expiration_date(x))
     self.orders["sort_by"] = pd.to_datetime(self.orders["datetime"])
     self.orders = self.orders.sort_values(by="sort_by")
-    self.orders.to_csv("data/example_orders.csv", index=False)
 
     self.options : pd.DataFrame = pd.read_csv("data/cleaned_options_data.csv")
     self.options["day"] = self.options["ts_recv"].apply(lambda x: x.split("T")[0])
+    self.options["hour"] = self.options["ts_recv"].apply(lambda x: int(x.split("T")[1].split(".")[0].split(":")[0]))
+
     self.underlying = pd.read_csv("data/underlying_data_hour.csv")
     self.underlying.columns = self.underlying.columns.str.lower()
+    self.underlying["day"] = self.underlying["date"].apply(lambda x : x.split(" ")[0])
+    self.underlying["hour"] = self.underlying["date"].apply(lambda x : int(x.split(" ")[1].split("-")[0].split(":")[0]))
 
     self.pnl : List = []
     self.max_drawdown : float = float("-inf")
     self.overall_return : float = 0
     self.sharpe_ratio : float = 0
     self.overall_score : float = 0
-    self.open_orders : pd.DataFrame = pd.DataFrame(columns=["day", "datetime", "option_symbol", "action", "order_size", "expiration_date"])
+    self.open_orders : pd.DataFrame = pd.DataFrame(columns=["day", "datetime", "option_symbol", "action", "order_size", "expiration_date", "hour"])
 
   def get_expiration_date(self, symbol) -> str:
     numbers : str = symbol.split(" ")[3]
@@ -89,9 +93,10 @@ class Backtester:
               self.portfolio_value += options_cost
               self.open_orders.loc[len(self.open_orders)] = row
           else:
-            underlying_price: float = float(self.underlying[self.underlying["date"] == row["day"]]["adj close"].iloc[0])
+            row["hour"] = min(row["hour"], 15)
+            underlying_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) & (self.underlying["hour"] == row["hour"])]["adj close"].iloc[0])
             sold_stock_cost: float = order_size * 100 * underlying_price
-            open_price: float = float(self.underlying[self.underlying["date"] == row["day"]]["open"].iloc[0])
+            open_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) & (self.underlying["hour"] == row["hour"])]["open"].iloc[0])
             margin : float = 100 * order_size * (buy_price + 0.1 * open_price)
             if (self.capital + order_size * buy_price + 0.1 * strike_price) > margin and (self.capital + order_size * buy_price + 0.1 * strike_price - sold_stock_cost + 0.5) > 0:
               self.capital += order_size * buy_price + 0.1 * strike_price
@@ -102,7 +107,9 @@ class Backtester:
       for _, order in self.open_orders.iterrows():
         option_metadata: List = self.parse_option_symbol(order["option_symbol"])
         if str(order["expiration_date"]) == str(current_date).split(" ")[0]:
-          underlying_price: float = float(self.underlying[self.underlying["date"] == order["day"]]["adj close"].iloc[0])
+          order["hour"] = min(order["hour"], 15)
+          assert len(self.underlying[(self.underlying["day"] == order["day"]) & (self.underlying["hour"] == order["hour"])]["adj close"]) == 1
+          underlying_price: float = float(self.underlying[(self.underlying["day"] == order["day"]) & (self.underlying["hour"] == order["hour"])]["adj close"].iloc[0])
           put_call: str = option_metadata[1]
           strike_price: float = option_metadata[2]
           order_size: float = float(order["order_size"])
