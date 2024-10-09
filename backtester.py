@@ -160,11 +160,11 @@ class Backtester:
               if underlying_price > strike_price:
                 loss = order_size * 100 * (underlying_price - strike_price)
                 self.portfolio_value -= loss
-              else:
-                if underlying_price < strike_price:
-                  cost = order_size * 100 * (strike_price - underlying_price)
-                  self.capital -= cost
-                  self.portfolio_value += cost
+            else:
+              if underlying_price < strike_price:
+                cost = order_size * 100 * (strike_price - underlying_price)
+                self.capital -= cost
+                self.portfolio_value += cost
       
       self.portfolio_value = max(self.portfolio_value, 0)
       
