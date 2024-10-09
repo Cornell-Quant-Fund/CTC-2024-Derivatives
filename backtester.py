@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import yfinance as yf
 from typing import List
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
@@ -37,6 +36,7 @@ class Backtester:
     self.sharpe_ratio : float = 0
     self.overall_score : float = 0
     self.open_orders : pd.DataFrame = pd.DataFrame(columns=["day", "datetime", "option_symbol", "action", "order_size", "expiration_date", "hour"])
+    self.open_orders["order_size"] = self.open_orders["order_size"].astype(float)
 
   def get_expiration_date(self, symbol) -> str:
     numbers : str = symbol.split(" ")[3]
@@ -54,6 +54,26 @@ class Backtester:
     action : str = numbers[6]
     strike_price : float = float(numbers[7:]) / 1000
     return [datetime.strptime(date_yymmdd, "%Y-%m-%d"), action, strike_price]
+  
+  def check_option_is_open(self, row: pd.Series) -> bool:
+    same: pd.DataFrame = self.open_orders[(self.open_orders["option_symbol"] == row["option_symbol"]) 
+                                          & (self.open_orders["datetime"] == row["datetime"])]
+    if len(same) > 0:
+      assert len(same) == 1
+      assert float(row["order_size"])
+      same_index: int = same.index[0]
+      if row["action"] == same["action"].iloc[0]:
+        self.open_orders.loc[same_index, "order_size"] += float(row["order_size"])
+      else:
+        if row["order_size"] > same["order_size"].iloc[0]:
+          self.open_orders.loc[same_index, "action"] = "B" if row["action"] == "S" else "S"
+          self.open_orders.loc[same_index, "order_size"] = float(row["order_size"] - same["order_size"].iloc[0])
+        elif row["order_size"] == same["order_size"].iloc[0]:
+          self.open_orders = self.open_orders.drop(index=same_index)
+        else:
+          self.open_orders.loc[same_index, "order_size"] -= float(row["order_size"])
+      return True
+    return False
 
   def calculate_pnl(self):
     delta: timedelta = timedelta(days=1)
@@ -90,26 +110,37 @@ class Backtester:
             margin: float = (ask_price + 0.1 * strike_price) * order_size
             if self.capital >= margin and self.capital - options_cost + 0.5 > 0:
               self.capital -= options_cost + 0.5
-              self.portfolio_value += options_cost
-              self.open_orders.loc[len(self.open_orders)] = row
+              self.portfolio_value += order_size * ask_price
+              if not self.check_option_is_open(row):
+                self.open_orders.loc[len(self.open_orders)] = row
+              
           else:
             row["hour"] = min(row["hour"], 15)
-            underlying_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) & (self.underlying["hour"] == row["hour"])]["adj close"].iloc[0])
+            underlying_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) 
+                                                            & (self.underlying["hour"] == row["hour"])]
+                                                            ["adj close"].iloc[0])
             sold_stock_cost: float = order_size * 100 * underlying_price
-            open_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) & (self.underlying["hour"] == row["hour"])]["open"].iloc[0])
+            open_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) 
+                                                      & (self.underlying["hour"] == row["hour"])]
+                                                      ["open"].iloc[0])
             margin : float = 100 * order_size * (buy_price + 0.1 * open_price)
             if (self.capital + order_size * buy_price + 0.1 * strike_price) > margin and (self.capital + order_size * buy_price + 0.1 * strike_price - sold_stock_cost + 0.5) > 0:
-              self.capital += order_size * buy_price + 0.1 * strike_price
+              self.capital += order_size * buy_price
               self.capital -= sold_stock_cost + 0.5
               self.portfolio_value += order_size * 100 * underlying_price
-              self.open_orders.loc[len(self.open_orders)] = row
+              if not self.check_option_is_open(row):
+                self.open_orders.loc[len(self.open_orders)] = row
 
       for _, order in self.open_orders.iterrows():
         option_metadata: List = self.parse_option_symbol(order["option_symbol"])
         if str(order["expiration_date"]) == str(current_date).split(" ")[0]:
           order["hour"] = min(order["hour"], 15)
-          assert len(self.underlying[(self.underlying["day"] == order["day"]) & (self.underlying["hour"] == order["hour"])]["adj close"]) == 1
-          underlying_price: float = float(self.underlying[(self.underlying["day"] == order["day"]) & (self.underlying["hour"] == order["hour"])]["adj close"].iloc[0])
+          assert len(self.underlying[(self.underlying["day"] == order["day"]) 
+                                     & (self.underlying["hour"] == order["hour"])]
+                                     ["adj close"]) == 1
+          underlying_price: float = float(self.underlying[(self.underlying["day"] == order["day"]) 
+                                                          & (self.underlying["hour"] == order["hour"])]
+                                                          ["adj close"].iloc[0])
           put_call: str = option_metadata[1]
           strike_price: float = option_metadata[2]
           order_size: float = float(order["order_size"])
@@ -138,9 +169,9 @@ class Backtester:
       self.portfolio_value = max(self.portfolio_value, 0)
       
       self.open_orders = self.open_orders[self.open_orders["expiration_date"] != str(current_date).split(" ")[0]]
-      current_date += delta
+      
       print(str(current_date), "capital:", self.capital, "portfolio value:", self.portfolio_value, "total pnl:", (self.capital + self.portfolio_value), "open orders:", len(self.open_orders))
-
+      current_date += delta
       self.pnl.append(self.capital + self.portfolio_value)
 
     # take care of open orders past the expiration date
