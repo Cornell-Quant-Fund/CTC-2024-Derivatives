@@ -176,7 +176,7 @@ class Backtester:
     
     if std_return > 0.0:
       risk_free_rate = 0.03 / 252
-      self.sharpe_ratio = (avg_return - risk_free_rate) / std_return
+      self.sharpe_ratio = (avg_return - 1 - risk_free_rate) / std_return
       print(f"Sharpe Ratio: {self.sharpe_ratio}")
     else:
       self.sharpe_ratio = 0.0
