@@ -190,7 +190,17 @@ class Backtester:
     print("after closing open orders: final capital:", self.capital, "final portfolio value:", self.portfolio_value, "final pnl:", self.pnl[-1])
 
   def compute_overall_score(self):
-    self.max_drawdown = (max(self.pnl) - min(self.pnl)) / max(self.pnl)
+    ptr : int = 0
+    high_point : float = float("-inf")
+    self.max_drawdown = 0.0
+
+    while ptr < len(self.pnl):
+      if self.pnl[ptr] > high_point:
+        high_point = self.pnl[ptr]
+      if self.pnl[ptr] < high_point:
+        self.max_drawdown = max(self.max_drawdown, (high_point - self.pnl[ptr]) / high_point)
+      ptr += 1
+
     print(f"Max Drawdown: {self.max_drawdown}")
 
     self.overall_return = 100 * ((self.pnl[-1] - 100_000_000) / 100_000_000)
