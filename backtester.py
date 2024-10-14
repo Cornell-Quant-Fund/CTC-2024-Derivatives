@@ -129,19 +129,17 @@ class Backtester:
         else:
           row["hour"] = min(row["hour"], 16)
           row["minute"] = 0 if row["hour"] == 16 else row["minute"] 
-          underlying_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) 
+          price: float = float(self.underlying[(self.underlying["day"] == row["day"]) 
                                                           & (self.underlying["hour"] == row["hour"])
                                                           & (self.underlying["minute"] == row["minute"])]
                                                           ["price"].iloc[0])
-          sold_stock_cost: float = order_size * 100 * underlying_price
-          open_price: float = float(self.underlying[(self.underlying["day"] == row["day"]) 
-                                                    & (self.underlying["hour"] == row["hour"])]
-                                                    ["price"].iloc[0])
-          margin : float = 100 * order_size * (buy_price + 0.1 * open_price)
-          if (self.capital + order_size * buy_price + 0.1 * strike_price) > margin and (self.capital + order_size * buy_price + 0.1 * strike_price - sold_stock_cost + 0.5) > 0:
+          sold_stock_cost: float = order_size * 100 * price
+
+          margin : float = 100 * order_size * (buy_price + 0.1 * price)
+          if self.capital >= margin:
             self.capital += order_size * buy_price * 100
             self.capital -= sold_stock_cost + 0.5
-            self.portfolio_value += order_size * 100 * underlying_price
+            self.portfolio_value += sold_stock_cost
             if not self.check_option_is_open(row):
               self.open_orders.loc[len(self.open_orders)] = row
 
@@ -195,12 +193,14 @@ class Backtester:
     for _, order in self.open_orders.iterrows():
       option_metadata: List = self.parse_option_symbol(order["option_symbol"])
       last_row : pd.Series = self.underlying.iloc[-1]
-      if (option_metadata[1] == "B"):
-        self.portfolio_value -= last_row["price"] * 100 * row["order_size"]
-        self.capital += 0.9 * (last_row["price"] * 100 * row["order_size"])
+      current_price = last_row["price"] * 100 * order["order_size"]
+
+      if option_metadata[1] == "B":
+        self.portfolio_value += 0.9 * current_price
+        self.capital -= current_price
       else:
-        self.portfolio_value += last_row["price"] * 100 * row["order_size"]
-        self.capital -= 1.1 * (last_row["price"] * 100 * row["order_size"])
+        self.portfolio_value -= 1.1 * current_price
+        self.capital += current_price
 
     self.pnl.append(self.capital + self.portfolio_value)
 
