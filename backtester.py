@@ -264,8 +264,8 @@ class Backtester:
         self.portfolio_value += 0.9 * current_price
         self.capital -= current_price
       elif order["action"] == "S":
-        self.portfolio_value -= 1.1 * current_price
-        self.capital += current_price
+        # self.portfolio_value -= 1.1 * current_price
+        self.capital -= 0.1 * current_price
 
     self.pnl.append(self.capital + self.portfolio_value)
     print("after closing open orders: final capital:", self.capital, "final portfolio value:", self.portfolio_value, "final pnl:", self.pnl[-1])
@@ -282,12 +282,12 @@ class Backtester:
         self.max_drawdown = max(self.max_drawdown, (high_point - self.pnl[ptr]) / high_point)
       ptr += 1
 
-    if self.max_drawdown < 0:
+    if self.max_drawdown <= 0:
       self.max_drawdown = 1 * math.pow(10, -10)
 
     print(f"Max Drawdown: {self.max_drawdown}")
 
-    self.overall_return = 100 * ((self.pnl[-1] - 100_000_000) / 100_000_000)
+    self.overall_return = 100 * (self.pnl[-1] / 100_000_000)
     print(f"Overall Return: {self.overall_return}%")
 
     percentage_returns = []
@@ -307,11 +307,8 @@ class Backtester:
       self.sharpe_ratio = 0.0
       print("Sharpe Ratio: Undefined (Standard Deviation = 0)")
 
-    if self.max_drawdown > 0 and self.sharpe_ratio > 0:
-      self.overall_score = (self.overall_return / self.max_drawdown) * self.sharpe_ratio
-      print(f"Overall Score: {self.overall_score}")
-    else:
-      print("Cannot calculate overall score (Max Drawdown or Sharpe Ratio <= 0)")
+    self.overall_score = (self.overall_return / self.max_drawdown) * self.sharpe_ratio
+    print(f"Overall Score: {self.overall_score}")
 
   def plot_pnl(self):
     if not isinstance(self.pnl, list) or len(self.pnl) == 0:
