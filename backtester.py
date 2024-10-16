@@ -156,7 +156,7 @@ class Backtester:
             if not self.check_option_is_open(row):
               new_row = pd.DataFrame([row]).dropna(axis=1, how="all")
               self.open_orders = pd.concat([self.open_orders, new_row], ignore_index=True)
-        elif order["action"] == "S":
+        elif row["action"] == "S":
           options_cost = order_size * 100 * buy_price
           margin = options_cost + 0.1 * strike_price if option_metadata[1] == "C" else options_cost + 0.1 * price
           # already_existing = self.open_orders[self.open_orders["option_symbol"] == row["option_symbol"]]
