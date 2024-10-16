@@ -43,7 +43,8 @@ class Backtester:
     self.overall_score : float = 0
     self.open_orders : pd.DataFrame = pd.DataFrame(columns=["day", "datetime", "option_symbol", 
                                                             "action", "order_size", "expiration_date", 
-                                                            "hour", "minute", "bid_px_00", "ask_px_00"])
+                                                            "hour", "minute", "bid_px_00", "ask_px_00",
+                                                            "running_bid_px_00", "running_ask_px_00"])
     self.open_orders["order_size"] = self.open_orders["order_size"].astype(float)
 
   def convert_ms_to_hhmm(self, milliseconds):
@@ -130,6 +131,8 @@ class Backtester:
 
         row["bid_px_00"] = buy_price
         row["ask_px_00"] = ask_price
+        row["running_bid_px_00"] = buy_price
+        row["running_ask_px_00"] = ask_price
 
         price = float(self.underlying[
                         (self.underlying["day"] == row["day"]) &
@@ -187,13 +190,13 @@ class Backtester:
                 stock_value = 100 * order_size * underlying_price
                 cost_to_buy = 100 * order_size * strike_price
                 self.capital += stock_value - cost_to_buy
-                self.portfolio_value -= order["order_size"] * 100 * order["ask_px_00"]
+                self.portfolio_value -= order["order_size"] * 100 * order["running_ask_px_00"]
             else:
               if underlying_price < strike_price:
                 stock_value = 100 * order_size * underlying_price
                 cost_to_buy = 100 * order_size * strike_price
                 self.capital += (cost_to_buy - stock_value)
-                self.portfolio_value -= order["order_size"] * 100 * order["ask_px_00"]
+                self.portfolio_value -= order["order_size"] * 100 * order["running_ask_px_00"]
           else:
             if put_call == "C":
               if underlying_price > strike_price:
@@ -223,25 +226,24 @@ class Backtester:
         current_ask_price = float(current_option_data["ask_px_00"])
 
         if order["action"] == "B":
-          original_buy_price = float(order["bid_px_00"])
-          if current_bid_price > float(order["bid_px_00"]):
-            profit = (current_bid_price - float(order["bid_px_00"])) * 100 * order_size
-            self.capital += profit
+          original_buy_price = float(order["running_ask_px_00"])
+          if current_bid_price > original_buy_price:
+            profit = (current_bid_price - original_buy_price) * 100 * order_size
             self.portfolio_value += profit
+            
           else:
             loss = (original_buy_price - current_bid_price) * 100 * order_size
-            self.capital -= loss
             self.portfolio_value -= loss
+          order["running_ask_px_00"] = current_bid_price
         elif order["action"] == "S":
-          original_sell_price = float(order["ask_px_00"])
-          if current_ask_price < float(order["ask_px_00"]):
-            profit = (float(order["ask_px_00"]) - current_ask_price) * 100 * order_size
+          original_sell_price = float(order["running_bid_px_00"])
+          if current_ask_price < original_sell_price:
+            profit = (original_sell_price - current_ask_price) * 100 * order_size
             self.capital += profit
-            self.portfolio_value += profit
           else:
             loss = (current_ask_price - original_sell_price) * 100 * order_size
             self.capital -= loss
-            self.portfolio_value -= loss
+          order["running_bid_px_00"] = current_ask_price
 
       self.portfolio_value = max(self.portfolio_value, 0)
       self.open_orders = self.open_orders[self.open_orders["expiration_date"] != day_str]
