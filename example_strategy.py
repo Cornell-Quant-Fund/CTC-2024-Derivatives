@@ -4,12 +4,12 @@ from datetime import datetime
 
 class Strategy:
   
-  def __init__(self) -> None:
+  def __init__(self, start_date, end_date) -> None:
     self.capital : float = 100_000_000
     self.portfolio_value : float = 0
 
-    self.start_date : datetime = datetime(2024, 1, 1)
-    self.end_date : datetime = datetime(2024, 3, 30)
+    self.start_date : datetime = start_date
+    self.end_date : datetime = end_date
   
     self.options : pd.DataFrame = pd.read_csv("data/cleaned_options_data.csv")
     self.options["day"] = self.options["ts_recv"].apply(lambda x: x.split("T")[0])
@@ -18,27 +18,26 @@ class Strategy:
     self.underlying.columns = self.underlying.columns.str.lower()
 
   def generate_orders(self) -> pd.DataFrame:
-    return pd.read_csv("data/arbitrage_test_orders.csv")
-    # orders = []
-    # num_orders = 1000
+    orders = []
+    num_orders = 150
     
-    # for _ in range(num_orders):
-    #   row = self.options.sample(n=1).iloc[0]
-    #   action = random.choice(["B", "S"])
+    for _ in range(num_orders):
+      row = self.options.sample(n=1).iloc[0]
+      action = random.choice(["B", "S"])
       
-    #   if action == "B":
-    #     order_size = random.randint(1, int(row["ask_sz_00"]))
-    #   else:
-    #     order_size = random.randint(1, int(row["bid_sz_00"]))
+      if action == "B":
+        order_size = random.randint(1, int(row["ask_sz_00"]))
+      else:
+        order_size = random.randint(1, int(row["bid_sz_00"]))
 
-    #   assert order_size <= int(row["ask_sz_00"]) or order_size <= int(row["bid_sz_00"])
+      assert order_size <= int(row["ask_sz_00"]) or order_size <= int(row["bid_sz_00"])
       
-    #   order = {
-    #     "datetime" : row["ts_recv"],
-    #     "option_symbol" : row["symbol"],
-    #     "action" : action,
-    #     "order_size" : order_size
-    #   }
-    #   orders.append(order)
+      order = {
+        "datetime" : row["ts_recv"],
+        "option_symbol" : row["symbol"],
+        "action" : action,
+        "order_size" : order_size
+      }
+      orders.append(order)
     
-    # return pd.DataFrame(orders)
+    return pd.DataFrame(orders)
