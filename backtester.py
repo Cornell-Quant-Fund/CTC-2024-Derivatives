@@ -73,7 +73,7 @@ class Backtester:
   
   def check_option_is_open(self, row: pd.Series) -> bool:
     same: pd.DataFrame = self.open_orders[(self.open_orders["option_symbol"] == row["option_symbol"]) 
-                                          & (self.open_orders["datetime"] == row["datetime"])]
+                                          ]
     if len(same) > 0:
       assert len(same) == 1
       assert float(row["order_size"])
@@ -149,15 +149,19 @@ class Backtester:
         if row["action"] == "B":
           options_cost = order_size * 100 * ask_price
           margin = options_cost + 0.1 * strike_price if option_metadata[1] == "C" else options_cost + 0.1 * price
+          margin = 0 if self.check_option_is_open(row) else margin
           if self.capital >= margin and (self.capital - options_cost + 0.5 > 0):
             self.capital -= options_cost + 0.5
             self.portfolio_value += options_cost
             if not self.check_option_is_open(row):
               new_row = pd.DataFrame([row]).dropna(axis=1, how="all")
               self.open_orders = pd.concat([self.open_orders, new_row], ignore_index=True)
-        else:
+        elif order["action"] == "S":
           options_cost = order_size * 100 * buy_price
           margin = options_cost + 0.1 * strike_price if option_metadata[1] == "C" else options_cost + 0.1 * price
+          # already_existing = self.open_orders[self.open_orders["option_symbol"] == row["option_symbol"]]
+          # if len(already_existing) > 0:
+
           if self.capital >= margin:
             self.capital += order_size * buy_price * 100
 
@@ -197,7 +201,7 @@ class Backtester:
                 cost_to_buy = 100 * order_size * strike_price
                 self.capital += (cost_to_buy - stock_value)
                 self.portfolio_value -= order["order_size"] * 100 * order["running_ask_px_00"]
-          else:
+          elif order["action"] == "S":
             if put_call == "C":
               if underlying_price > strike_price:
                 loss = order_size * 100 * (underlying_price - strike_price)
@@ -245,7 +249,7 @@ class Backtester:
             self.capital -= loss
           order["running_bid_px_00"] = current_ask_price
 
-      self.portfolio_value = max(self.portfolio_value, 0)
+      # self.portfolio_value = max(self.portfolio_value, 0)
       self.open_orders = self.open_orders[self.open_orders["expiration_date"] != day_str]
 
       current_date += delta
