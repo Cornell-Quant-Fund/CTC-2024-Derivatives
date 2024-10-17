@@ -21,7 +21,7 @@ class Backtester:
     self.orders["minute"] = self.orders["datetime"].apply(lambda x: int(x.split("T")[1].split(".")[0].split(":")[1]))
     self.orders["expiration_date"] = self.orders["option_symbol"].apply(lambda x: self.get_expiration_date(x))
     self.orders["sort_by"] = pd.to_datetime(self.orders["datetime"])
-    self.orders = self.orders.sort_values(by="sort_by")
+    self.orders = self.orders.sort_values(by="sort_by", kind="stable")
 
     self.options : pd.DataFrame = pd.read_csv("data/cleaned_options_data.csv")
     self.options["day"] = self.options["ts_recv"].apply(lambda x: x.split("T")[0])
@@ -72,8 +72,7 @@ class Backtester:
     return [datetime.strptime(date_yymmdd, "%Y-%m-%d"), action, strike_price]
   
   def check_option_is_open(self, row: pd.Series) -> bool:
-    same: pd.DataFrame = self.open_orders[(self.open_orders["option_symbol"] == row["option_symbol"]) 
-                                          ]
+    same: pd.DataFrame = self.open_orders[(self.open_orders["option_symbol"] == row["option_symbol"])]
     if len(same) > 0:
       assert len(same) == 1
       assert float(row["order_size"])
@@ -149,7 +148,7 @@ class Backtester:
         if row["action"] == "B":
           options_cost = order_size * 100 * ask_price
           margin = options_cost + 0.1 * strike_price if option_metadata[1] == "C" else options_cost + 0.1 * price
-          margin = 0 if self.check_option_is_open(row) else margin
+          margin = 0 if row["option_symbol"] in self.open_orders["option_symbol"].tolist() else margin
           if self.capital >= margin and (self.capital - options_cost + 0.5 > 0):
             self.capital -= options_cost + 0.5
             self.portfolio_value += options_cost
