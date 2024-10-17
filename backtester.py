@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 class Backtester:
 
-  def __init__(self, start_date, end_date, strategy) -> None:
+  def __init__(self, start_date, end_date, strategy, options_data, underlying) -> None:
     self.capital : float = 100_000_000
     self.portfolio_value : float = 0
 
@@ -16,6 +16,7 @@ class Backtester:
   
     self.user_strategy = strategy
     self.orders : pd.DataFrame = self.user_strategy.generate_orders()
+    self.orders.to_csv("example_orders.csv",index=False)
     self.orders["day"] = self.orders["datetime"].apply(lambda x: x.split("T")[0])
     self.orders["hour"] = self.orders["datetime"].apply(lambda x: int(x.split("T")[1].split(".")[0].split(":")[0]))
     self.orders["minute"] = self.orders["datetime"].apply(lambda x: int(x.split("T")[1].split(".")[0].split(":")[1]))
@@ -23,11 +24,11 @@ class Backtester:
     self.orders["sort_by"] = pd.to_datetime(self.orders["datetime"])
     self.orders = self.orders.sort_values(by="sort_by", kind="stable")
 
-    self.options : pd.DataFrame = pd.read_csv("data/cleaned_options_data.csv")
+    self.options : pd.DataFrame = pd.read_csv(options_data)
     self.options["day"] = self.options["ts_recv"].apply(lambda x: x.split("T")[0])
     self.options["hour"] = self.options["ts_recv"].apply(lambda x: int(x.split("T")[1].split(".")[0].split(":")[0])) # FIX
 
-    self.underlying = pd.read_csv("data/spx_minute_level_data_jan_mar_2024.csv")
+    self.underlying = pd.read_csv(underlying)
     self.underlying.columns = self.underlying.columns.str.lower()
     self.underlying["date"] = self.underlying["date"].astype(str)
     self.underlying["day"] = self.underlying["date"].apply(lambda x : x[:4] + "-" + x[4:6] + "-" + x[6:])
@@ -55,20 +56,17 @@ class Backtester:
     return [hours + 5, remaining_minutes] # + 5 to account for UTC->EST
 
   def get_expiration_date(self, symbol) -> str:
-    numbers : str = symbol.split(" ")[3]
-    date : str = numbers[:6]
-    date_yymmdd : str = "20" + date[0:2] + "-" + date[2:4] + "-" + date[4:6]
+    numbers : str = symbol.split(" ")[1]
+    date : str = numbers[:8]
+    date_yymmdd : str = date[0:4] + "-" + date[4:6] + "-" + date[6:8]
     return date_yymmdd
 
   def parse_option_symbol(self, symbol) -> List:
-    """
-    example: SPX   240419C00800000
-    """
-    numbers : str = symbol.split(" ")[3]
-    date : str = numbers[:6]
-    date_yymmdd : str = "20" + date[0:2] + "-" + date[2:4] + "-" + date[4:6]
-    action : str = numbers[6]
-    strike_price : float = float(numbers[7:]) / 1000
+    numbers : str = symbol.split(" ")[1]
+    date : str = numbers[:8]
+    date_yymmdd : str = date[0:4] + "-" + date[4:6] + "-" + date[6:8]
+    action : str = numbers[8]
+    strike_price : float = int(numbers[9:])/1000 
     return [datetime.strptime(date_yymmdd, "%Y-%m-%d"), action, strike_price]
   
   def check_option_is_open(self, row: pd.Series) -> bool:
@@ -233,7 +231,6 @@ class Backtester:
           if current_bid_price > original_buy_price:
             profit = (current_bid_price - original_buy_price) * 100 * order_size
             self.portfolio_value += profit
-            
           else:
             loss = (original_buy_price - current_bid_price) * 100 * order_size
             self.portfolio_value -= loss
@@ -253,7 +250,7 @@ class Backtester:
 
       current_date += delta
       self.pnl.append(self.capital + self.portfolio_value)
-      print(str(current_date), "capital:", self.capital, "portfolio value:", self.portfolio_value, "total pnl:", (self.capital + self.portfolio_value), "open orders:", len(self.open_orders))
+      # print(str(current_date), "capital:", self.capital, "portfolio value:", self.portfolio_value, "total pnl:", (self.capital + self.portfolio_value), "open orders:", len(self.open_orders))
 
     last_row = self.underlying.iloc[-1]
     for _, order in self.open_orders.iterrows():
@@ -267,7 +264,9 @@ class Backtester:
         self.capital -= 0.1 * current_price
 
     self.pnl.append(self.capital + self.portfolio_value)
-    print("after closing open orders: final capital:", self.capital, "final portfolio value:", self.portfolio_value, "final pnl:", self.pnl[-1])
+    # print("after closing open orders: final capital:", self.capital, "final portfolio value:", self.portfolio_value, "final pnl:", self.pnl[-1])
+
+    return True
 
   def compute_overall_score(self):
     ptr : int = 0
@@ -284,44 +283,33 @@ class Backtester:
     if self.max_drawdown <= 0:
       self.max_drawdown = 1 * math.pow(10, -10)
 
-    print(f"Max Drawdown: {self.max_drawdown}")
+    # print(f"Max Drawdown: {self.max_drawdown}")
 
     self.overall_return = 100 * (self.pnl[-1] / 100_000_000)
-    print(f"Overall Return: {self.overall_return}%")
+    # print(f"Overall Return: {self.overall_return}%")
 
     percentage_returns = []
     prev = 100_000_000
     for i in range(len(self.pnl)):
-      percentage_returns.append(self.pnl[i] / prev)
+      percentage_returns.append((self.pnl[i] / prev) - 1)
       prev = self.pnl[i]
 
     avg_return = np.sum(percentage_returns) / 61 # 61 trading days in simulation period
     std_return = np.std(percentage_returns)
+    # print(self.pnl)
+    # print(percentage_returns)
+    # print(avg_return)
+    # print(std_return)
     
     if std_return > 0.0:
       risk_free_rate = 0.03 / 252
-      self.sharpe_ratio = (avg_return - 1 - risk_free_rate) / std_return
-      print(f"Sharpe Ratio: {self.sharpe_ratio}")
+      self.sharpe_ratio = (avg_return - risk_free_rate) / std_return
+      # print(f"Sharpe Ratio: {self.sharpe_ratio}")
     else:
       self.sharpe_ratio = 0.0
-      print("Sharpe Ratio: Undefined (Standard Deviation = 0)")
+      raise ValueError("Sharpe Ratio: Undefined (Standard Deviation = 0)")
 
     self.overall_score = (self.overall_return / self.max_drawdown) * self.sharpe_ratio
-    print(f"Overall Score: {self.overall_score}")
+    # print(f"Overall Score: {self.overall_score}")
 
-  def plot_pnl(self):
-    if not isinstance(self.pnl, list) or len(self.pnl) == 0:
-      print("PNL data is not available or empty")
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(self.pnl, label="PnL", color="blue", marker="o", linestyle="-", markersize=5)
-    
-    plt.title("Profit and Loss Over Time", fontsize=14)
-    plt.xlabel("Time (Days)", fontsize=12)
-    plt.ylabel("PnL (Profit/Loss)", fontsize=12)
-    
-    plt.grid(True, linestyle="--", alpha=0.6)
-    plt.legend(loc="best")
-    
-    plt.tight_layout()
-    plt.show()
+    return True
