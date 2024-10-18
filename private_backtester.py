@@ -82,7 +82,9 @@ class Backtester:
           self.open_orders.loc[same_index, "action"] = "B" if row["action"] == "S" else "S"
           self.open_orders.loc[same_index, "order_size"] = float(row["order_size"] - same["order_size"].iloc[0])
         elif row["order_size"] == same["order_size"].iloc[0]:
+          options_cost = 100 * float(row["ask_px_00"]) * float(row["order_size"])
           self.open_orders = self.open_orders.drop(index=same_index)
+          self.portfolio_value -= options_cost
         else:
           self.open_orders.loc[same_index, "order_size"] -= float(row["order_size"])
       return True
@@ -140,32 +142,40 @@ class Backtester:
         if order_size < 0:
           raise ValueError("Order size must be positive")
 
-        # if (row["action"] == "B" and order_size > ask_size) or (row["action"] == "S" and order_size > buy_size):
-        #   raise ValueError(f"Order size exceeds available size; order size: {order_size}, ask size: {ask_size}, buy size: {buy_size}; action: {row['action']}")
+        if (row["action"] == "B" and order_size > ask_size) or (row["action"] == "S" and order_size > buy_size):
+          raise ValueError(f"Order size exceeds available size; order size: {order_size}, ask size: {ask_size}, buy size: {buy_size}; action: {row['action']}")
 
         if row["action"] == "B":
           options_cost = order_size * 100 * ask_price
           margin = options_cost + 0.1 * strike_price if option_metadata[1] == "C" else options_cost + 0.1 * price
           margin = 0 if row["option_symbol"] in self.open_orders["option_symbol"].tolist() else margin
+          
           if self.capital >= margin and (self.capital - options_cost + 0.5 > 0):
+            print("B", options_cost)
             self.capital -= options_cost + 0.5
             self.portfolio_value += options_cost
+            
             if not self.check_option_is_open(row):
               new_row = pd.DataFrame([row]).dropna(axis=1, how="all")
               self.open_orders = pd.concat([self.open_orders, new_row], ignore_index=True)
+
+            # if not row["option_symbol"] in self.open_orders["option_symbol"].values:
+            #   self.capital += options_cost + 0.5
+            #   self.portfolio_value -= options_cost
+
         elif row["action"] == "S":
           options_cost = order_size * 100 * buy_price
           margin = options_cost + 0.1 * strike_price if option_metadata[1] == "C" else options_cost + 0.1 * price
-          # already_existing = self.open_orders[self.open_orders["option_symbol"] == row["option_symbol"]]
-          # if len(already_existing) > 0:
 
           if self.capital >= margin:
-            self.capital += order_size * buy_price * 100
+            print("S", options_cost)
+            self.capital += options_cost - 0.5
+            # self.portfolio_value -= options_cost
 
             if not self.check_option_is_open(row):
               new_row = pd.DataFrame([row]).dropna(axis=1, how="all")
               self.open_orders = pd.concat([self.open_orders, new_row], ignore_index=True)
-
+          
       for _, order in self.open_orders.iterrows():
         option_metadata = self.parse_option_symbol(order["option_symbol"])
         if str(order["expiration_date"]) == day_str:
@@ -236,17 +246,20 @@ class Backtester:
             self.portfolio_value -= loss
           order["running_ask_px_00"] = current_bid_price
         elif order["action"] == "S":
-          original_sell_price = float(order["running_bid_px_00"])
-          if current_ask_price < original_sell_price:
-            profit = (original_sell_price - current_ask_price) * 100 * order_size
-            self.capital += profit
-          else:
-            loss = (current_ask_price - original_sell_price) * 100 * order_size
-            self.capital -= loss
+          # original_sell_price = float(order["running_bid_px_00"])
+          # if current_ask_price < original_sell_price:
+          #   profit = (original_sell_price - current_ask_price) * 100 * order_size
+          #   self.capital += profit
+          # else:
+          #   loss = (current_ask_price - original_sell_price) * 100 * order_size
+          #   self.capital -= loss
           order["running_bid_px_00"] = current_ask_price
 
       # self.portfolio_value = max(self.portfolio_value, 0)
       self.open_orders = self.open_orders[self.open_orders["expiration_date"] != day_str]
+
+      if len(self.open_orders) == 0:
+        self.portfolio_value = 0
 
       current_date += delta
       self.pnl.append(self.capital + self.portfolio_value)
@@ -262,6 +275,9 @@ class Backtester:
       elif order["action"] == "S":
         # self.portfolio_value -= 1.1 * current_price
         self.capital -= 0.1 * current_price
+
+    if len(self.open_orders) == 0:
+      self.portfolio_value = 0
 
     self.pnl.append(self.capital + self.portfolio_value)
     # print("after closing open orders: final capital:", self.capital, "final portfolio value:", self.portfolio_value, "final pnl:", self.pnl[-1])
